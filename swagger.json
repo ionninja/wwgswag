@@ -1,0 +1,1566 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+      "title": "Spinshield Games API",
+      "description": "This is the API for Spinshield Games. You can use this API to manage player accounts and free rounds.\nFor more information, visit [Spinshield](https://spinshield.com).\n\nSome useful links:\n- [The Spinshield repository](https://github.com/spinshield/spinshield-api)\n- [The source API definition for Spinshield](https://github.com/spinshield/spinshield-api/blob/master/src/main/resources/openapi.yaml)\n\n## General Info\n### Seamless Wallet\nWe make use of the seamless wallet principal. This means that you control the player's balance/funds completely.\nWe simply let you know what happens on the game and inform you of each game action.\n\n### PHP Client\nIf you are using PHP on your project, we have a composer package available to assist you with integrating our games API.\nFor more details check the package on github or run `composer require spinshield/spinclient` to get started.\n\n### API Methods\nWhen you send requests to our game server, this should be POST request and include JSON body content.\nYour JSON body content should always include your `api_login` and your `api_password`, these details can be found within the backoffice.\n\n```json\n{\n  \"api_login\" : \"d13b1ceb-6209-4163-b1cf-f304c28b81ec\",\n  \"api_password\": \"dqRin2nfLosij2n88\",\n  ...\n}\n```\n\n### Callback Communication\nOur game server sends GET requests to your callback URL and always expects a JSON response that includes error code and player balance. If player balance can not be retrieved for whatever reason, you should return 0 as balance.\n\nAll balance must be returned as integer and in cents, that means if your player's balance is 2.50$ this should be returned as 250.\n\n#### Successful Response\n```json\n{\n  \"error\": 0,\n  \"balance\": 250\n}\n```\n\n#### Insufficient Balance Response\n```json\n{\n  \"error\": 1,\n  \"balance\": 250\n}\n```\n\n#### Processing Error (for example player not found or invalid signature)\n```json\n{\n  \"error\": 2,\n  \"balance\": 0\n}\n```\n\n### Callback Action: balance\nThis callback will be sent to your callback URL, specified within the backoffice. We will send this callback at start of game. You should always return balance in integer format.\n\nThe call_id is a unique id sent with each callback and can be considered the transaction id.\n\n#### CallbackBalance\n```json\n{\n  \"username\": \"yourPlayerId9959\",\n  \"currency\": \"USD\",\n  \"action\": \"balance\",\n  \"call_id\": \"e2b801a1-e098-411c-8940-00514cb8070c\",\n  \"timestamp\": \"1696463571\",\n  \"key\": \"6c4e5fd14e796284b327bb4f9603aee4\"\n}\n```\n\n#### Responses\nBalance must be returned as integer and in cents, that means if your player's balance is 2.50$ this should be returned as 250.\n\n##### Successful Response:\n```json\n{\n  \"error\": 0,\n  \"balance\": 250\n}\n```\n\n##### Insufficient Balance\n```json\n{\n  \"error\": 1,\n  \"balance\": 250\n}\n```\n\n##### Processing Error (for example player not found or invalid signature)\n```json\n{\n  \"error\": 2,\n  \"balance\": 0\n}\n```\n\n### Callback Action: debit/credit\nDepending on the callback action you should credit/debit your player's balance for the amount given on callback.\n\nIf player does not have enough balance on debit action, you should return the insufficient balance response (error: 1) like shown below.\n\nThe call_id is a unique id sent with each callback and can be considered the transaction id.\n\n#### Important note\nYou should allow credit action and debit action independently of each other.\n\nThere are cases where a credit callback can be sent without first sending a debit callback, per example in case of rollback/refund system activated.\n\nIn some game providers there may be occurrences where new round_id is made on each game action, for example when bonus game won on some providers this might be sent as individual game rounds and will thus only send credit action.\n\nThis may also affect gameplay_final in particular cases.\n\n#### Requests\nRequests are sent as GET to your callback URL, which is specified on your API key configuration.\n\n#### Spin Callback\n```json\n{\n  \"amount\": 100,\n  \"username\": \"yourPlayerId9959\",\n  \"currency\": \"USD\",\n  \"action\": \"debit\",\n  \"gameplay_final\": 0,\n  \"type\": \"spin\",\n  \"round_id\": \"312875958396\",\n  \"game_id\": \"onlyplay/LigaFortunaMegaways\",\n  \"call_id\": \"f51fce58-2e0e-461b-8a0c-87ecba0600c2\",\n  \"timestamp\": \"1696463565\",\n  \"key\": \"4e54de0b17adf322365c0540bd7db57a\"\n}\n```\n\n#### Free Round Spin Callback\nThis callback is sent when player is playing on gifted free rounds, after using the addFreeRounds method.\n\nYou should not deduct a player's balance on debit callbacks when type variable is set to bonus_fs.\n\n```json\n{\n  \"amount\": 25,\n  \"currency\": \"CAD\",\n  \"action\": \"debit\",\n  \"gameplay_final\": 0,\n  \"type\": \"bonus_fs\",\n  \"round_id\": \"1074911949\",\n  \"game_id\": \"platipus/luckycat\",\n  \"username\": \"wmlmhohuhfs\",\n  \"call_id\": \"6ce7154b-be61-4bab-b5a6-642488064c41\",\n  \"operator_id\": 24,\n  \"timestamp\": \"1696463565\",\n  \"key\": \"ed3a34c119wec67fb8e37691b5885f0\",\n  \"freespins\": {\n      \"total\": 20,\n      \"performed\": 3\n  }\n}\n```\n\n#### Responses\nBalance must be returned as integer and in cents, that means if your player's balance is 2.50$ this should be returned as 250.\n\n##### Successful Response\n```json\n{\n  \"error\": 0,\n  \"balance\": 250\n}\n```\n\n##### Insufficient Balance\n```json\n{\n  \"error\": 1,\n  \"balance\": 250\n}\n```\n\n##### Processing Error (for example player not found or invalid signature)\n```json\n{\n  \"error\": 2,\n  \"balance\": 0\n}\n```\n\n### Callback Validation\nEach callback sent includes key variable and timestamp variable. This makes you able to verify the origin of the callback is coming from us.\n\nThe key is constructed by the timestamp variable + salt_key. The salt key is unique and specific per API key, you can set new salt key in the backoffice.\n\n#### Key Construct (Javascript)\n```javascript\nmd5($timestamp + $saltkey);\n```\n\n#### Key Construct (PHP)\n```php\nmd5($timestamp.$saltkey);\n```\n\nTo validate the signature, simply create the signature then check if it is the same as the key variable sent on the callback.\n\nIf the signature does not match return response:\n```json\n{\n  \"error\": 2,\n  \"balance\": 0\n}\n```",
+      "termsOfService": "http://spinshield.com/terms/",
+      "contact": {
+        "email": "support@spinshield.com"
+      },
+      "license": {
+        "name": "Apache 2.0",
+        "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+      },
+      "version": "1.0.0"
+    },
+    "externalDocs": {
+      "description": "Find out more about Spinshield",
+      "url": "http://spinshield.com"
+    },
+    "servers": [
+      {
+        "url": "https://gs.aggregtr.com/api/system/operator"
+      }
+    ],
+    "tags": [
+      {
+        "name": "spinShield",
+        "description": "Operations related to Games API",
+        "externalDocs": {
+          "description": "Find out more",
+          "url": "https://wildwestgaming.net"
+        }
+      },
+      {
+        "name": "freeRounds",
+        "description": "Operations related to free rounds"
+      },
+      {
+        "name": "player",
+        "description": "Operations related to player management"
+      },
+      {
+        "name": "games",
+        "description": "Operations related to games"
+      }
+    ],
+    "paths": {
+      "/addFreeRounds": {
+        "post": {
+          "tags": [
+            "freeRounds"
+          ],
+          "summary": "Add Free Rounds",
+          "description": "This method adds free spins to player. If player is already playing on the slotmachine, it will start the free rounds on the next available spin/init.\n",
+          "operationId": "addFreeRounds",
+          "requestBody": {
+            "description": "Method Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddFreeRoundsRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful operation",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "error": {
+                        "type": "integer",
+                        "example": 0
+                      },
+                      "response": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 7
+                          },
+                          "player_id": {
+                            "type": "integer",
+                            "example": 57
+                          },
+                          "game_id": {
+                            "type": "string",
+                            "example": "softswiss/LuckyCrew"
+                          },
+                          "freespins": {
+                            "type": "integer",
+                            "example": 12
+                          },
+                          "freespins_wallet": {
+                            "type": "integer",
+                            "example": 0
+                          },
+                          "freespins_performed": {
+                            "type": "integer",
+                            "example": 0
+                          },
+                          "bet_level": {
+                            "type": "integer",
+                            "example": 0
+                          },
+                          "currency": {
+                            "type": "string",
+                            "example": "USD"
+                          },
+                          "operator_id": {
+                            "type": "integer",
+                            "example": 4
+                          },
+                          "valid_until": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2023-10-17T12:19:16.700332Z"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2023-10-10T12:19:16.700360Z"
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2023-10-10T12:19:16.700363Z"
+                          },
+                          "active": {
+                            "type": "boolean",
+                            "example": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Resource not found",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation exception",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            }
+          },
+          "security": [
+            {
+              "api_login": []
+            },
+            {
+              "api_password": []
+            }
+          ]
+        }
+      },
+      "/deleteFreeRounds": {
+        "post": {
+          "tags": [
+            "freeRounds"
+          ],
+          "summary": "Delete Free Rounds",
+          "description": "This deactivates all active free rounds for specific player on specified slotmachine.",
+          "operationId": "deleteFreeRounds",
+          "requestBody": {
+            "description": "Method Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "api_login": {
+                      "type": "string",
+                      "example": "ff8d1a23-644c-4647-9234-a603643390c7-500559"
+                    },
+                    "api_password": {
+                      "type": "string",
+                      "example": "x28cJDWmgwCx"
+                    },
+                    "method": {
+                      "type": "string",
+                      "example": "deleteFreeRounds"
+                    },
+                    "gameid": {
+                      "type": "string",
+                      "example": "softswiss/LuckyCrew"
+                    },
+                    "user_username": {
+                      "type": "string",
+                      "example": "yourPlayerId9959"
+                    },
+                    "user_password": {
+                      "type": "string",
+                      "example": "superSecretPlayerPassword"
+                    },
+                    "currency": {
+                      "type": "string",
+                      "example": "USD"
+                    }
+                  },
+                  "required": [
+                    "api_login",
+                    "api_password",
+                    "method",
+                    "gameid",
+                    "user_username",
+                    "user_password",
+                    "currency"
+                  ]
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful operation",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "error": {
+                        "type": "integer",
+                        "example": 0
+                      },
+                      "response": {
+                        "type": "string",
+                        "example": "Free rounds deactivated successfully"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Resource not found",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation exception",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            }
+          },
+          "security": [
+            {
+              "api_login": []
+            },
+            {
+              "api_password": []
+            }
+          ]
+        }
+      },
+      "/deleteAllFreeRounds": {
+        "post": {
+          "tags": [
+            "freeRounds"
+          ],
+          "summary": "Delete All Free Rounds",
+          "description": "This deactivates all active free rounds for specific player on all slotmachines.",
+          "operationId": "deleteAllFreeRounds",
+          "requestBody": {
+            "description": "Method Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "api_login": {
+                      "type": "string",
+                      "example": "ff8d1a23-644c-4647-9234-a603643390c7-500559"
+                    },
+                    "api_password": {
+                      "type": "string",
+                      "example": "x28cJDWmgwCx"
+                    },
+                    "method": {
+                      "type": "string",
+                      "example": "deleteAllFreeRounds"
+                    },
+                    "user_username": {
+                      "type": "string",
+                      "example": "yourPlayerId9959"
+                    },
+                    "user_password": {
+                      "type": "string",
+                      "example": "superSecretPlayerPassword"
+                    },
+                    "currency": {
+                      "type": "string",
+                      "example": "USD"
+                    }
+                  },
+                  "required": [
+                    "api_login",
+                    "api_password",
+                    "method",
+                    "user_username",
+                    "user_password",
+                    "currency"
+                  ]
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful operation",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "error": {
+                        "type": "integer",
+                        "example": 0
+                      },
+                      "response": {
+                        "type": "string",
+                        "example": "All free rounds deactivated successfully"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Resource not found",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation exception",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            }
+          },
+          "security": [
+            {
+              "api_login": []
+            },
+            {
+              "api_password": []
+            }
+          ]
+        }
+      },
+      "/createPlayer": {
+        "post": {
+          "tags": [
+            "player"
+          ],
+          "summary": "Create a new player",
+          "description": "The createPlayer method should be invoked before sending other requests. For safe integration you should always call this, even if you already created player before.",
+          "operationId": "createPlayer",
+          "requestBody": {
+            "description": "Method Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatePlayerRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful operation",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "error": {
+                        "type": "integer",
+                        "example": 0
+                      },
+                      "response": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 51
+                          },
+                          "username": {
+                            "type": "string",
+                            "example": "yourPlayerId9959"
+                          },
+                          "balance": {
+                            "type": "string",
+                            "example": "0.00"
+                          },
+                          "currencycode": {
+                            "type": "string",
+                            "example": "USD"
+                          },
+                          "created": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2023-10-10T11:44:22.000000Z"
+                          },
+                          "agent_balance": {
+                            "type": "string",
+                            "example": null
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Resource not found",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation exception",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            }
+          },
+          "security": [
+            {
+              "api_login": []
+            },
+            {
+              "api_password": []
+            }
+          ]
+        }
+      },
+      "/playerExists": {
+        "post": {
+          "tags": [
+            "player"
+          ],
+          "summary": "Check if player exists",
+          "description": "This method is deprecated to invoke directly, instead just call createPlayer method. If the player already exists, it automatically redirects the method request to this method.",
+          "operationId": "playerExists",
+          "requestBody": {
+            "description": "Method Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerExistsRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful operation",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "error": {
+                        "type": "integer",
+                        "example": 0
+                      },
+                      "response": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 53
+                          },
+                          "username": {
+                            "type": "string",
+                            "example": "yourPlayerId9959"
+                          },
+                          "balance": {
+                            "type": "string",
+                            "example": "0.00"
+                          },
+                          "created": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2023-10-10T11:48:39.000000Z"
+                          },
+                          "agent_balance": {
+                            "type": "string",
+                            "example": null
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Resource not found",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation exception",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            }
+          },
+          "security": [
+            {
+              "api_login": []
+            },
+            {
+              "api_password": []
+            }
+          ]
+        }
+      },
+      "/getGameList": {
+        "post": {
+          "tags": [
+            "games"
+          ],
+          "summary": "Get Game List",
+          "description": "This method returns all available games. You should always use the id_hash variable when opening game using the getGame method. Games that are eligible for the addFreeRounds method are returned as freerounds_supported: true.\n",
+          "operationId": "getGameList",
+          "requestBody": {
+            "description": "Method Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "api_login": {
+                      "type": "string",
+                      "example": "d13b1ceb-6209-4163-b1cf-f304c28b81ec"
+                    },
+                    "api_password": {
+                      "type": "string",
+                      "example": "dqRin2nfLosij2n88"
+                    },
+                    "method": {
+                      "type": "string",
+                      "example": "getGameList"
+                    },
+                    "show_additional": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "show_systems": {
+                      "type": "integer",
+                      "example": 0
+                    },
+                    "list_type": {
+                      "type": "integer",
+                      "example": 1
+                    },
+                    "currency": {
+                      "type": "string",
+                      "example": "USD"
+                    }
+                  },
+                  "required": [
+                    "api_login",
+                    "api_password",
+                    "method",
+                    "show_additional",
+                    "show_systems",
+                    "list_type",
+                    "currency"
+                  ]
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful operation",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/GameListResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Resource not found",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation exception",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            }
+          },
+          "security": [
+            {
+              "api_login": []
+            },
+            {
+              "api_password": []
+            }
+          ]
+        }
+      },
+      "/getFreeRounds": {
+        "post": {
+          "tags": [
+            "freeRounds"
+          ],
+          "summary": "Get Free Rounds",
+          "description": "This method returns all free rounds history for given player. The freespins_bet is updated after the first freespin has commenced, before it is set to 0. The freespins_wallet is total win amount. Once freespins_performed amount is same as freespins amount and active is set to false you can consider the bonus completed.",
+          "operationId": "getFreeRounds",
+          "requestBody": {
+            "description": "Method Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetFreeRoundsRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful operation",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "error": {
+                        "type": "integer",
+                        "example": 0
+                      },
+                      "response": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "integer",
+                              "example": 7
+                            },
+                            "game_id": {
+                              "type": "string",
+                              "example": "softswiss/LuckyCrew"
+                            },
+                            "currency": {
+                              "type": "string",
+                              "example": "USD"
+                            },
+                            "player_id": {
+                              "type": "integer",
+                              "example": 57
+                            },
+                            "freespins": {
+                              "type": "integer",
+                              "example": 48
+                            },
+                            "freespins_bet": {
+                              "type": "integer",
+                              "example": 0
+                            },
+                            "freespins_wallet": {
+                              "type": "integer",
+                              "example": 0
+                            },
+                            "freespins_performed": {
+                              "type": "integer",
+                              "example": 0
+                            },
+                            "bet_level": {
+                              "type": "integer",
+                              "example": 0
+                            },
+                            "extra_data": {
+                              "type": "string",
+                              "example": null
+                            },
+                            "active": {
+                              "type": "boolean",
+                              "example": true
+                            },
+                            "operator_id": {
+                              "type": "integer",
+                              "example": 4
+                            },
+                            "valid_until": {
+                              "type": "string",
+                              "format": "date-time",
+                              "example": "2023-10-17 12:19:16"
+                            },
+                            "created_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "example": "2023-10-10 12:19:16"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Resource not found",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation exception",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            }
+          },
+          "security": [
+            {
+              "api_login": []
+            },
+            {
+              "api_password": []
+            }
+          ]
+        }
+      },
+      "/getGame": {
+        "post": {
+          "tags": [
+            "games"
+          ],
+          "summary": "Open Game Session",
+          "description": "This method opens a game session and returns the game URL that you should serve to your players. You should always invoke the createPlayer method before using this method to ensure the player exists. On gameid you should always use the id_hash variable returned on the getGameList method. Invoke the getGameDemo method to open a demo (fun play) session.\n",
+          "operationId": "getGame",
+          "requestBody": {
+            "description": "Method Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetGameRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful operation",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "error": {
+                        "type": "integer",
+                        "example": 0
+                      },
+                      "response": {
+                        "type": "string",
+                        "example": "https://client-mga.spinshield.net/i?play=aHR0cHM6Ly9jbGllbnQtbWdhLnNwaW5zaGllbGQubmV0L3BsYXkvOGI1NGVkZjRmMWQ0YzNlZmRhZmQ5MGU1ZmQ5MmM5OWQvMzcxOTgyMy9zb2Z0c3MvRGljZUJvbmFuemE="
+                      },
+                      "session_id": {
+                        "type": "string",
+                        "example": "8b54edf4f1d4c3efdafd90e5fd92c99d"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Resource not found",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation exception",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            }
+          },
+          "security": [
+            {
+              "api_login": []
+            },
+            {
+              "api_password": []
+            }
+          ]
+        }
+      },
+      "/getGameDemo": {
+        "post": {
+          "tags": [
+            "games"
+          ],
+          "summary": "Open Demo Game Session",
+          "description": "This method opens a demo (fun play) game session and returns the game URL that you should serve to your players. On gameid you should always use the id_hash variable returned on the getGameList method.\n",
+          "operationId": "getGameDemo",
+          "requestBody": {
+            "description": "Method Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetGameDemoRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful operation",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "error": {
+                        "type": "integer",
+                        "example": 0
+                      },
+                      "response": {
+                        "type": "string",
+                        "example": "https://client-mga.spinshield.net/i?play=aHR0cHM6Ly9jbGllbnQtbWdhLnNwaW5zaGllbGQubmV0L3BsYXkvOGI1NGVkZjRmMWQ0YzNlZmRhZmQ5MGU1ZmQ5MmM5OWQvMzcxOTgyMy9zb2Z0c3MvRGljZUJvbmFuemE="
+                      },
+                      "session_id": {
+                        "type": "string",
+                        "example": "8b54edf4f1d4c3efdafd90e5fd92c99d"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "404": {
+              "description": "Resource not found",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation exception",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse"
+                  }
+                }
+              }
+            }
+          },
+          "security": [
+            {
+              "api_login": []
+            },
+            {
+              "api_password": []
+            }
+          ]
+        }
+      }
+    },
+    "components": {
+      "securitySchemes": {
+        "api_login": {
+          "type": "apiKey",
+          "name": "api_login",
+          "in": "header"
+        },
+        "api_password": {
+          "type": "apiKey",
+          "name": "api_password",
+          "in": "header"
+        }
+      },
+      "parameters": {
+        "ApiLogin": {
+          "name": "api_login",
+          "in": "header",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "example": "d13b1ceb-6209-4163-b1cf-f304c28b81ec"
+        },
+        "ApiPassword": {
+          "name": "api_password",
+          "in": "header",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "example": "dqRin2nfLosij2n88"
+        }
+      },
+      "responses": {
+        "InvalidInput": {
+          "description": "Invalid input",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        },
+        "NotFound": {
+          "description": "Resource not found",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        },
+        "ValidationException": {
+          "description": "Validation exception",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorResponse"
+              }
+            }
+          }
+        }
+      },
+      "schemas": {
+        "AddFreeRoundsRequest": {
+          "type": "object",
+          "properties": {
+            "api_login": {
+              "type": "string",
+              "example": "ff8d1a23-644c-4647-9234-a603643390c7-500559"
+            },
+            "api_password": {
+              "type": "string",
+              "example": "x28cJDWmgwCx"
+            },
+            "method": {
+              "type": "string",
+              "example": "addFreeRounds"
+            },
+            "gameid": {
+              "type": "string",
+              "example": "softswiss/LuckyCrew"
+            },
+            "freespins": {
+              "type": "integer",
+              "example": 12
+            },
+            "bet_level": {
+              "type": "integer",
+              "example": 0
+            },
+            "valid_days": {
+              "type": "integer",
+              "example": 7
+            },
+            "user_username": {
+              "type": "string",
+              "example": "yourPlayerId9959"
+            },
+            "user_password": {
+              "type": "string",
+              "example": "superSecretPlayerPassword"
+            },
+            "currency": {
+              "type": "string",
+              "example": "USD"
+            }
+          },
+          "required": [
+            "api_login",
+            "api_password",
+            "method",
+            "gameid",
+            "freespins",
+            "bet_level",
+            "valid_days",
+            "user_username",
+            "user_password",
+            "currency"
+          ],
+          "example": {
+            "api_login": "ff8d1a23-644c-4647-9234-a603643390c7-500559",
+            "api_password": "x28cJDWmgwCx",
+            "method": "addFreeRounds",
+            "gameid": "softswiss/LuckyCrew",
+            "freespins": 12,
+            "bet_level": 0,
+            "valid_days": 7,
+            "user_username": "yourPlayerId9959",
+            "user_password": "superSecretPlayerPassword",
+            "currency": "USD"
+          }
+        },
+        "CreatePlayerRequest": {
+          "type": "object",
+          "properties": {
+            "api_login": {
+              "type": "string",
+              "description": "API login key",
+              "example": "d13b1ceb-6209-4163-b1cf-f304c28b81ec"
+            },
+            "api_password": {
+              "type": "string",
+              "description": "API password key",
+              "example": "dqRin2nfLosij2n88"
+            },
+            "method": {
+              "type": "string",
+              "description": "API method name",
+              "example": "createPlayer"
+            },
+            "user_username": {
+              "type": "string",
+              "description": "Username of the player",
+              "example": "yourPlayerId9959"
+            },
+            "user_password": {
+              "type": "string",
+              "description": "Password of the player",
+              "example": "superSecretPlayerPassword"
+            },
+            "currency": {
+              "type": "string",
+              "description": "Currency code",
+              "example": "USD"
+            }
+          },
+          "required": [
+            "api_login",
+            "api_password",
+            "method",
+            "user_username",
+            "user_password",
+            "currency"
+          ],
+          "example": {
+            "api_login": "d13b1ceb-6209-4163-b1cf-f304c28b81ec",
+            "api_password": "dqRin2nfLosij2n88",
+            "method": "createPlayer",
+            "user_username": "yourPlayerId9959",
+            "user_password": "superSecretPlayerPassword",
+            "currency": "USD"
+          }
+        },
+        "ErrorResponse": {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "integer",
+              "example": 1
+            },
+            "message": {
+              "type": "string",
+              "example": "An error occurred"
+            }
+          }
+        },
+        "GameListResponse": {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "integer",
+              "example": 0
+            },
+            "response": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "example": 483
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "Fruits On Ice Collection 40 Lines"
+                  },
+                  "type": {
+                    "type": "string",
+                    "example": "video-slots"
+                  },
+                  "category": {
+                    "type": "string",
+                    "example": "spinomenal"
+                  },
+                  "subcategory": {
+                    "type": "string",
+                    "example": "video-slots"
+                  },
+                  "details": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "new": {
+                    "type": "boolean",
+                    "example": false
+                  },
+                  "mobile": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "id_hash": {
+                    "type": "string",
+                    "example": "spinomenal/FruitsOnIceCollection40Lines"
+                  },
+                  "id_hash_parent": {
+                    "type": "string",
+                    "example": "spinomenal/FruitsOnIceCollection40Lines"
+                  },
+                  "freerounds_supported": {
+                    "type": "boolean",
+                    "example": false
+                  },
+                  "featurebuy_supported": {
+                    "type": "boolean",
+                    "example": false
+                  },
+                  "has_jackpot": {
+                    "type": "boolean",
+                    "example": false
+                  },
+                  "play_for_fun_supported": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "image": {
+                    "type": "string",
+                    "example": "https://cdn2.softswiss.net/bets/i/s3/spinomenal/FruitsOnIceCollection40Lines.webp"
+                  },
+                  "image_square": {
+                    "type": "string",
+                    "example": "https://cdn2.softswiss.net/bets/i/s3/spinomenal/FruitsOnIceCollection40Lines.webp"
+                  },
+                  "image_portrait": {
+                    "type": "string",
+                    "example": "https://cdn2.softswiss.net/bets/i/s4/spinomenal/FruitsOnIceCollection40Lines.webp"
+                  },
+                  "image_long": {
+                    "type": "string",
+                    "example": "https://cdn2.softswiss.net/bets/i/s6/spinomenal/FruitsOnIceCollection40Lines.webp"
+                  },
+                  "currency": {
+                    "type": "string",
+                    "example": "USD"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "GetFreeRoundsRequest": {
+          "type": "object",
+          "properties": {
+            "api_login": {
+              "type": "string",
+              "example": "d13b1ceb-6209-4163-b1cf-f304c28b81ec"
+            },
+            "api_password": {
+              "type": "string",
+              "example": "dqRin2nfLosij2n88"
+            },
+            "method": {
+              "type": "string",
+              "example": "getFreeRounds"
+            },
+            "user_username": {
+              "type": "string",
+              "example": "yourPlayerId9959"
+            },
+            "user_password": {
+              "type": "string",
+              "example": "superSecretPlayerPassword"
+            },
+            "currency": {
+              "type": "string",
+              "example": "USD"
+            }
+          },
+          "required": [
+            "api_login",
+            "api_password",
+            "method",
+            "user_username",
+            "user_password",
+            "currency"
+          ],
+          "example": {
+            "api_login": "d13b1ceb-6209-4163-b1cf-f304c28b81ec",
+            "api_password": "dqRin2nfLosij2n88",
+            "method": "getFreeRounds",
+            "user_username": "yourPlayerId9959",
+            "user_password": "superSecretPlayerPassword",
+            "currency": "USD"
+          }
+        },
+        "GetGameRequest": {
+          "type": "object",
+          "properties": {
+            "api_login": {
+              "type": "string",
+              "example": "d13b1ceb-6209-4163-b1cf-f304c28b81ec"
+            },
+            "api_password": {
+              "type": "string",
+              "example": "dqRin2nfLosij2n88"
+            },
+            "method": {
+              "type": "string",
+              "example": "getGame"
+            },
+            "lang": {
+              "type": "string",
+              "example": "en"
+            },
+            "user_username": {
+              "type": "string",
+              "example": "yourPlayerId9959"
+            },
+            "user_password": {
+              "type": "string",
+              "example": "superSecretPlayerPassword"
+            },
+            "gameid": {
+              "type": "string",
+              "example": "softswiss/DiceBonanza"
+            },
+            "homeurl": {
+              "type": "string",
+              "example": "https://url.to.your.page.com"
+            },
+            "cashierurl": {
+              "type": "string",
+              "example": "https://url.to.cashier.page.com"
+            },
+            "play_for_fun": {
+              "type": "integer",
+              "example": 0
+            },
+            "currency": {
+              "type": "string",
+              "example": "USD"
+            }
+          },
+          "required": [
+            "api_login",
+            "api_password",
+            "method",
+            "lang",
+            "user_username",
+            "user_password",
+            "gameid",
+            "homeurl",
+            "cashierurl",
+            "play_for_fun",
+            "currency"
+          ],
+          "example": {
+            "api_login": "d13b1ceb-6209-4163-b1cf-f304c28b81ec",
+            "api_password": "dqRin2nfLosij2n88",
+            "method": "getGame",
+            "lang": "en",
+            "user_username": "yourPlayerId9959",
+            "user_password": "superSecretPlayerPassword",
+            "gameid": "softswiss/DiceBonanza",
+            "homeurl": "https://url.to.your.page.com",
+            "cashierurl": "https://url.to.cashier.page.com",
+            "play_for_fun": 0,
+            "currency": "USD"
+          }
+        },
+        "GetGameDemoRequest": {
+          "type": "object",
+          "properties": {
+            "api_login": {
+              "type": "string",
+              "example": "d13b1ceb-6209-4163-b1cf-f304c28b81ec"
+            },
+            "api_password": {
+              "type": "string",
+              "example": "dqRin2nfLosij2n88"
+            },
+            "method": {
+              "type": "string",
+              "example": "getGameDemo"
+            },
+            "lang": {
+              "type": "string",
+              "example": "en"
+            },
+            "gameid": {
+              "type": "string",
+              "example": "softswiss/DiceBonanza"
+            },
+            "homeurl": {
+              "type": "string",
+              "example": "https://url.to.your.page.com"
+            },
+            "cashierurl": {
+              "type": "string",
+              "example": "https://url.to.cashier.page.com"
+            },
+            "currency": {
+              "type": "string",
+              "example": "USD"
+            }
+          },
+          "required": [
+            "api_login",
+            "api_password",
+            "method",
+            "lang",
+            "gameid",
+            "homeurl",
+            "cashierurl",
+            "currency"
+          ],
+          "example": {
+            "api_login": "d13b1ceb-6209-4163-b1cf-f304c28b81ec",
+            "api_password": "dqRin2nfLosij2n88",
+            "method": "getGameDemo",
+            "lang": "en",
+            "gameid": "softswiss/DiceBonanza",
+            "homeurl": "https://url.to.your.page.com",
+            "cashierurl": "https://url.to.cashier.page.com",
+            "currency": "USD"
+          }
+        },
+        "PlayerExistsRequest": {
+          "type": "object",
+          "properties": {
+            "api_login": {
+              "type": "string",
+              "example": "d13b1ceb-6209-4163-b1cf-f304c28b81ec"
+            },
+            "api_password": {
+              "type": "string",
+              "example": "dqRin2nfLosij2n88"
+            },
+            "method": {
+              "type": "string",
+              "example": "playerExists"
+            },
+            "user_username": {
+              "type": "string",
+              "example": "yourPlayerId9959"
+            },
+            "currency": {
+              "type": "string",
+              "example": "USD"
+            }
+          },
+          "required": [
+            "api_login",
+            "api_password",
+            "method",
+            "user_username",
+            "currency"
+          ],
+          "example": {
+            "api_login": "d13b1ceb-6209-4163-b1cf-f304c28b81ec",
+            "api_password": "dqRin2nfLosij2n88",
+            "method": "playerExists",
+            "user_username": "yourPlayerId9959",
+            "currency": "USD"
+          }
+        }
+      }
+    }
+  }

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE instance-profile
+        SYSTEM "https://resources.jetbrains.com/writerside/1.0/product-profile.dtd">
+
+<instance-profile id="ar"
+                  name="API Reference" start-page="API_Reference.topic">
+
+    <toc-element topic="API_Reference.topic">
+        <toc-element topic="Schemas.topic">
+            <toc-element topic="PlayerExistsRequest.topic"/>
+            <toc-element topic="GetGameDemoRequest.topic"/>
+            <toc-element topic="GetGameRequest.topic"/>
+            <toc-element topic="GetFreeRoundsRequest.topic"/>
+            <toc-element topic="GameListResponse.topic"/>
+            <toc-element topic="ErrorResponse.topic"/>
+            <toc-element topic="CreatePlayerRequest.topic"/>
+            <toc-element topic="AddFreeRoundsRequest.topic"/>
+        </toc-element>
+        <toc-element topic="Open_Demo_Game_Session.topic"/>
+        <toc-element topic="Open_Game_Session.topic"/>
+        <toc-element topic="Get_Free_Rounds.topic"/>
+        <toc-element topic="Get_Game_List.topic"/>
+        <toc-element topic="Check_if_player_exists.topic"/>
+        <toc-element topic="Create_a_new_player.topic"/>
+        <toc-element topic="Delete_All_Free_Rounds.topic"/>
+        <toc-element topic="Delete_Free_Rounds.topic"/>
+        <toc-element topic="Add_Free_Rounds.topic"/>
+    </toc-element>
+</instance-profile>

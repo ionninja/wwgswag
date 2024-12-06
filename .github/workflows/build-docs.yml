@@ -29,26 +29,56 @@ jobs:
           echo "INSTANCE_ID_UPPER=$INSTANCE_ID_UPPER" >> $GITHUB_ENV
           echo "ALGOLIA_ARTIFACT=algolia-indexes-$INSTANCE_ID_UPPER.zip" >> $GITHUB_ENV
           echo "ARTIFACT=webHelp$INSTANCE_ID_UPPER-all.zip" >> $GITHUB_ENV
+          echo "::set-output name=algolia_artifact::algolia-indexes-$INSTANCE_ID_UPPER.zip"
+          echo "::set-output name=artifact::webHelp$INSTANCE_ID_UPPER-all.zip"
 
       - name: Run JetBrains Writerside GitHub Action
         uses: JetBrains/writerside-github-action@v4
         with:
           instance: ${{ env.INSTANCE }}
-          artifact: ${{ env.ARTIFACT }}
+          artifact: ${{ steps.define-ids.outputs.artifact }}
           docker-version: ${{ env.DOCKER_VERSION }}
-        env:
-          INSTANCE: ${{ env.INSTANCE }}
-          DOCKER_VERSION: ${{ env.DOCKER_VERSION }}
-          INSTANCE_ID_UPPER: ${{ env.INSTANCE_ID_UPPER }}
-          ARTIFACT: ${{ env.ARTIFACT }}
-          ALGOLIA_ARTIFACT: ${{ env.ALGOLIA_ARTIFACT }}
 
-      - name: Test existing artifacts
-        run: |
-          echo "Test existing artifacts"
-          test -e /github/workspace/artifacts/${{ env.ARTIFACT }} && echo ${{ env.ARTIFACT }} exists
-          if [ -z "$(ls -A /github/workspace/artifacts/ 2>/dev/null)" ]; then
-             echo "Artifacts not found" && false
-          else
-             chmod 777 /github/workspace/artifacts/
-             ls -la /github/workspace/artifacts/
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs
+          path: |
+            artifacts/${{ steps.define-ids.outputs.artifact }}
+            artifacts/report.json
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download docs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs
+          path: artifacts
+
+      - name: Check build report
+        uses: JetBrains/writerside-checker-action@v1
+        with:
+          report-path: artifacts/report.json
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download docs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs
+          path: artifacts
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: artifacts
